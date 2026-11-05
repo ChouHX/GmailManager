@@ -7,6 +7,7 @@ import { FontScaleProvider } from './components/FontScaleProvider'
 import { AppShell, type Route } from './components/AppShell'
 import { TooltipProvider } from './components/ui/tooltip'
 import { LoginPage } from './pages/LoginPage'
+import { PublicFetchPage } from './pages/PublicFetchPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { FetchPage } from './pages/FetchPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -16,6 +17,11 @@ const ROUTES: Route[] = ['accounts', 'fetch', 'settings']
 function routeFromHash(): Route {
   const hash = window.location.hash.replace(/^#\/?/, '')
   return (ROUTES as string[]).includes(hash) ? (hash as Route) : 'accounts'
+}
+
+/** `/f/<token>` is a public read-only page: no auth provider, no shell. */
+function isPublicFetch(): boolean {
+  return /^\/f\//.test(window.location.pathname)
 }
 
 function Shell() {
@@ -53,6 +59,16 @@ function Shell() {
 }
 
 export default function App() {
+  if (isPublicFetch()) {
+    return (
+      <ThemeProvider>
+        <FontScaleProvider>
+          <PublicFetchPage />
+        </FontScaleProvider>
+      </ThemeProvider>
+    )
+  }
+
   return (
     <ThemeProvider>
       <FontScaleProvider>

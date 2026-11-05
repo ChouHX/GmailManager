@@ -25,6 +25,9 @@ type Config struct {
 	FetchConcurrency int
 	FetchTimeout     time.Duration
 	FetchLimit       int
+	// PublicBaseURL overrides the origin used when generating share links,
+	// e.g. https://mail.example.com behind a reverse proxy.
+	PublicBaseURL string
 }
 
 func env(key, def string) string {
@@ -73,6 +76,7 @@ func Load() Config {
 		FetchConcurrency: envInt("GM_FETCH_CONCURRENCY", 6),
 		FetchTimeout:     time.Duration(envInt("GM_FETCH_TIMEOUT_SECONDS", 60)) * time.Second,
 		FetchLimit:       envInt("GM_FETCH_LIMIT", 10),
+		PublicBaseURL:    strings.TrimRight(env("GM_PUBLIC_BASE_URL", ""), "/"),
 	}
 }
 

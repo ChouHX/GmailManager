@@ -2,7 +2,6 @@
 .gitignore
 node_modules
 web/node_modules
-web/dist
 web/.vite
 *.exe
 *.db

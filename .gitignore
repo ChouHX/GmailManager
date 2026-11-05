@@ -2,9 +2,11 @@
 web/node_modules
 node_modules
 
-# build output
+# build output.
+# web/dist keeps a placeholder so `go vet`/`go build` work on a fresh clone
+# (main.go embeds all:web/dist). Real build output is excluded.
 web/dist/*
-!web/dist/.gitkeep
+!web/dist/index.html
 web/.vite
 dist
 

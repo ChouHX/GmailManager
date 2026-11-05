@@ -83,6 +83,16 @@ export interface FetchResult {
   durationMs: number
 }
 
+export interface FetchLink {
+  accountId: number
+  email: string
+  token: string
+  url: string
+  createdAt: number
+  lastUsedAt: number
+  useCount: number
+}
+
 export interface ImportResult {
   created: number
   updated: number
@@ -150,6 +160,13 @@ export const api = {
   verifyAccount: (id: number) =>
     request<{ ok: boolean; message: string }>(`/api/accounts/${id}/verify`, { method: 'POST' }),
   totp: (id: number) => request<{ code: string; remaining: number; period: number }>(`/api/accounts/${id}/totp`),
+
+  accountLink: (id: number) => request<FetchLink>(`/api/accounts/${id}/link`),
+  revokeLink: (id: number) =>
+    request<{ ok: boolean }>(`/api/accounts/${id}/link/revoke`, { method: 'POST' }),
+  bulkLinks: (ids: number[]) => request<{ links: FetchLink[] }>('/api/accounts/links', json({ ids })),
+  exportLinksUrl: (ids?: number[]) =>
+    ids && ids.length ? `/api/accounts/links/export?ids=${ids.join(',')}` : '/api/accounts/links/export',
 
   fetchAccount: (id: number, limit = 10, folder = 'auto') =>
     request<FetchResult>(`/api/fetch/${id}?limit=${limit}&folder=${folder}`),

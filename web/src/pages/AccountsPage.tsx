@@ -5,6 +5,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Link2,
   Loader2,
   Pencil,
   Plus,
@@ -13,6 +14,7 @@ import {
   Trash2,
   Upload,
   Download,
+  ExternalLink,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { api, ApiError, type Account, type ImportResult } from '../api'
@@ -66,6 +68,9 @@ export function AccountsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [bulkDelete, setBulkDelete] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [linkFor, setLinkFor] = useState<Account | null>(null)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [bulkLinkBusy, setBulkLinkBusy] = useState(false)
   const [totpFor, setTotpFor] = useState<Account | null>(null)
   const [totp, setTotp] = useState<{ code: string; remaining: number } | null>(null)
 
@@ -162,6 +167,44 @@ export function AccountsPage() {
     toast(selected.length ? `正在导出 ${selected.length} 个账号` : '正在导出全部账号', 'info')
   }
 
+  /** Opens the dialog for one account's share link. */
+  const openLink = async (row: Account) => {
+    setLinkFor(row)
+    setLinkBusy(true)
+    try {
+      const link = await api.accountLink(row.id)
+      setLinkFor({ ...row, shareUrl: link.url } as Account & { shareUrl: string })
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : '生成链接失败', 'error')
+      setLinkFor(null)
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
+  /** Ensures links for the selection, then downloads them as a text file. */
+  const exportLinks = async () => {
+    if (!selected.length) {
+      toast('请先选择账号', 'info')
+      return
+    }
+    setBulkLinkBusy(true)
+    try {
+      await api.bulkLinks(selected)
+      const a = document.createElement('a')
+      a.href = api.exportLinksUrl(selected)
+      a.download = ''
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      toast(`已生成并导出 ${selected.length} 个取件链接`, 'success')
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : '导出链接失败', 'error')
+    } finally {
+      setBulkLinkBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -221,6 +264,19 @@ export function AccountsPage() {
                 className="flex items-center gap-2"
               >
                 <span className="text-[11px] text-muted-foreground">已选 {selected.length} 项</span>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={bulkLinkBusy}
+                  onClick={() => void exportLinks()}
+                >
+                  {bulkLinkBusy ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Link2 className="size-3" />
+                  )}
+                  导出链接
+                </Button>
                 <Button variant="outline" size="xs" className="text-destructive" onClick={() => setBulkDelete(true)}>
                   <Trash2 className="size-3" />
                   批量删除
@@ -320,6 +376,9 @@ export function AccountsPage() {
                     }}
                   >
                     <Pencil className="size-3.5" />
+                  </IconAction>
+                  <IconAction label="取件链接" onClick={() => void openLink(row)}>
+                    <Link2 className="size-3.5" />
                   </IconAction>
                   <IconAction label="删除" danger onClick={() => setDeleteTarget(row)}>
                     <Trash2 className="size-3.5" />
@@ -440,6 +499,9 @@ export function AccountsPage() {
                     >
                       <Pencil className="size-3.5" />
                     </IconAction>
+                    <IconAction label="取件链接" onClick={() => void openLink(row)}>
+                      <Link2 className="size-3.5" />
+                    </IconAction>
                     <IconAction label="删除" danger onClick={() => setDeleteTarget(row)}>
                       <Trash2 className="size-3.5" />
                     </IconAction>
@@ -497,6 +559,20 @@ export function AccountsPage() {
       </ConfirmDialog>
 
       <TotpDialog account={totpFor} totp={totp} onClose={() => setTotpFor(null)} onCopy={copyValue} />
+
+      <LinkDialog
+        account={linkFor}
+        busy={linkBusy}
+        onClose={() => setLinkFor(null)}
+        onCopy={copyValue}
+        onRevoked={() => {
+          setLinkFor(null)
+          toast('链接已撤销', 'success')
+        }}
+        revoke={async (id) => {
+          await api.revokeLink(id)
+        }}
+      />
     </div>
   )
 }
@@ -847,6 +923,117 @@ function ImportDialog({
           <Button size="sm" onClick={submit} disabled={busy || lineCount === 0}>
             {busy && <Loader2 className="size-3.5 animate-spin" />}
             {busy ? '导入中…' : '开始导入'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Shows a single account's public fetch link with copy / open / revoke. */
+function LinkDialog({
+  account,
+  busy,
+  onClose,
+  onCopy,
+  onRevoked,
+  revoke,
+}: {
+  account: (Account & { shareUrl?: string }) | null
+  busy: boolean
+  onClose: () => void
+  onCopy: (value: string, label: string) => void
+  onRevoked: () => void
+  revoke: (id: number) => Promise<void>
+}) {
+  const [confirmRevoke, setConfirmRevoke] = useState(false)
+  const [revoking, setRevoking] = useState(false)
+  const url = account?.shareUrl ?? ''
+
+  useEffect(() => {
+    if (!account) {
+      setConfirmRevoke(false)
+      setRevoking(false)
+    }
+  }, [account])
+
+  return (
+    <Dialog open={Boolean(account)} onOpenChange={(v) => !v && !revoking && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>取件链接</DialogTitle>
+          <DialogDescription className="truncate">{account?.email}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 px-4 py-3">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            任何人持有该链接即可在无需登录的情况下查看此账号的最新 10 封邮件（含垃圾箱）。请谨慎分享。
+          </p>
+
+          <div className="rounded-lg border border-border bg-muted/40 p-2">
+            <p className="mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+              链接
+            </p>
+            {busy ? (
+              <div className="flex items-center gap-2 py-1 text-[11.5px] text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                正在生成…
+              </div>
+            ) : (
+              <p className="font-mono text-[10.5px] leading-relaxed break-all select-all">{url}</p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={!url}
+              onClick={() => onCopy(url, '取件链接')}
+            >
+              <Copy className="size-3" />
+              复制链接
+            </Button>
+            <Button variant="outline" size="xs" disabled={!url} asChild>
+              <a href={url || '#'} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="size-3" />
+                打开
+              </a>
+            </Button>
+            {confirmRevoke ? (
+              <Button
+                size="xs"
+                variant="destructive"
+                disabled={revoking}
+                onClick={async () => {
+                  if (!account) return
+                  setRevoking(true)
+                  try {
+                    await revoke(account.id)
+                    onRevoked()
+                  } finally {
+                    setRevoking(false)
+                  }
+                }}
+              >
+                {revoking ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+                确认撤销
+              </Button>
+            ) : (
+              <Button size="xs" variant="ghost" onClick={() => setConfirmRevoke(true)}>
+                撤销链接
+              </Button>
+            )}
+          </div>
+
+          <p className="text-[10px] leading-relaxed text-muted-foreground/80">
+            撤销后旧链接立即失效，再次点击链接图标会生成新的链接。
+          </p>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={revoking}>
+            关闭
           </Button>
         </DialogFooter>
       </DialogContent>

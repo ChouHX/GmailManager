@@ -99,6 +99,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/fetch/{id}", s.auth(s.handleAccountFetch))
 	mux.HandleFunc("GET /api/fetch/{id}/message", s.auth(s.handleMessage))
 
+	// Share links (admin side)
+	mux.HandleFunc("GET /api/accounts/{id}/link", s.auth(s.handleAccountLink))
+	mux.HandleFunc("POST /api/accounts/{id}/link/revoke", s.auth(s.handleRevokeLink))
+	mux.HandleFunc("POST /api/accounts/links", s.auth(s.handleBulkLinks))
+	mux.HandleFunc("GET /api/accounts/links/export", s.auth(s.handleExportLinks))
+
+	// Public, token-scoped endpoints — deliberately outside s.auth.
+	mux.HandleFunc("GET /api/public/f/{token}", s.handlePublicInfo)
+	mux.HandleFunc("GET /api/public/f/{token}/messages", s.handlePublicMessages)
+	mux.HandleFunc("GET /api/public/f/{token}/message", s.handlePublicMessage)
+
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "接口不存在")
 	})

@@ -98,6 +98,19 @@ CREATE TABLE IF NOT EXISTS accounts (
 	updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
+
+CREATE TABLE IF NOT EXISTS fetch_links (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	account_id INTEGER NOT NULL,
+	token TEXT NOT NULL UNIQUE,
+	label TEXT NOT NULL DEFAULT '',
+	revoked INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL,
+	last_used_at INTEGER NOT NULL DEFAULT 0,
+	use_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_links_account ON fetch_links(account_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_links_token ON fetch_links(token);
 `
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
@@ -283,6 +296,9 @@ func (s *Store) Update(ctx context.Context, a Account) error {
 
 // Delete removes one account.
 func (s *Store) Delete(ctx context.Context, id int64) error {
+	if err := s.DeleteLinksForAccount(ctx, id); err != nil {
+		return err
+	}
 	res, err := s.db.ExecContext(ctx, "DELETE FROM accounts WHERE id = ?", id)
 	if err != nil {
 		return err
@@ -304,6 +320,9 @@ func (s *Store) DeleteMany(ctx context.Context, ids []int64) (int64, error) {
 	for i, id := range ids {
 		holders[i] = "?"
 		args[i] = id
+	}
+	if _, err := s.db.ExecContext(ctx, "DELETE FROM fetch_links WHERE account_id IN ("+strings.Join(holders, ",")+")", args...); err != nil {
+		return 0, err
 	}
 	res, err := s.db.ExecContext(ctx, "DELETE FROM accounts WHERE id IN ("+strings.Join(holders, ",")+")", args...)
 	if err != nil {
