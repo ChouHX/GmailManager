@@ -50,7 +50,7 @@ func newIMAPEnv(t *testing.T) (*testEnv, *imaptest.Server) {
 	}
 	apiServer := New(cfg, st, box, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("spa"))
-	}))
+	}), BuildInfo{Version: "test", Commit: "test"})
 	srv := httptestServer(t, apiServer.Handler())
 	jar := newJar()
 	return &testEnv{srv: srv, client: newClient(jar), store: st, cfg: cfg}, imapSrv

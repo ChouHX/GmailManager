@@ -52,7 +52,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	assets := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "<!doctype html><title>spa</title>")
 	})
-	api := New(cfg, st, box, assets)
+	api := New(cfg, st, box, assets, BuildInfo{Version: "test", Commit: "test"})
 	srv := httptest.NewServer(api.Handler())
 	t.Cleanup(srv.Close)
 

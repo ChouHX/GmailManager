@@ -24,11 +24,18 @@ import (
 //go:embed all:web/dist
 var embedded embed.FS
 
+// Set at build time via -ldflags "-X main.version=... -X main.commit=...".
+var (
+	version = "dev"
+	commit  = "none"
+)
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("[gmailmanager] ")
 
 	cfg := config.Load()
+	log.Printf("version %s (%s)", version, commit)
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		log.Fatalf("create data dir: %v", err)
 	}
@@ -49,7 +56,7 @@ func main() {
 		log.Fatalf("load frontend assets: %v", err)
 	}
 
-	srv := api.New(cfg, st, box, assets)
+	srv := api.New(cfg, st, box, assets, api.BuildInfo{Version: version, Commit: commit})
 	srv.LogStartup()
 
 	httpServer := &http.Server{

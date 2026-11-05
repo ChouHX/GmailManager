@@ -1,0 +1,16 @@
+# 可选覆盖：从本地源码构建镜像，而不是拉取 CI 产物。
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# 国内网络较慢时，把下面的 registry / proxy 换成镜像源。
+services:
+  gmailmanager:
+    image: gmailmanager:local
+    pull_policy: build
+    build:
+      context: .
+      args:
+        NPM_REGISTRY: https://registry.npmjs.org
+        GOPROXY: https://proxy.golang.org,direct
+        VERSION: local
+        COMMIT: local

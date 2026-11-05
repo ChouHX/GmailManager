@@ -21,6 +21,12 @@ import (
 	"gmailmanager/internal/totp"
 )
 
+// BuildInfo is injected at link time and surfaced by /api/health.
+type BuildInfo struct {
+	Version string
+	Commit  string
+}
+
 // Server wires together storage, IMAP and the HTTP handlers.
 type Server struct {
 	cfg      config.Config
@@ -30,10 +36,17 @@ type Server struct {
 	sessions *sessionManager
 	assets   http.Handler
 	fetchSem chan struct{}
+	build    BuildInfo
 }
 
 // New builds the API server. assets serves the built frontend.
-func New(cfg config.Config, st *store.Store, box *secret.Box, assets http.Handler) *Server {
+func New(cfg config.Config, st *store.Store, box *secret.Box, assets http.Handler, build BuildInfo) *Server {
+	if build.Version == "" {
+		build.Version = "dev"
+	}
+	if build.Commit == "" {
+		build.Commit = "none"
+	}
 	s := &Server{
 		cfg:      cfg,
 		store:    st,
@@ -42,6 +55,7 @@ func New(cfg config.Config, st *store.Store, box *secret.Box, assets http.Handle
 		sessions: newSessionManager(cfg.Secret, cfg.SessionTTL, cfg.CookieSecure),
 		assets:   assets,
 		fetchSem: make(chan struct{}, maxInt(2, cfg.FetchConcurrency)),
+		build:    build,
 	}
 	return s
 }
@@ -58,7 +72,12 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "time": time.Now().Unix()})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "ok",
+			"time":    time.Now().Unix(),
+			"version": s.build.Version,
+			"commit":  s.build.Commit,
+		})
 	})
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)

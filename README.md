@@ -44,12 +44,43 @@ Gmail 账号管理与 IMAP 取件控制台。**React + shadcn/ui + KokonutUI + T
 
 ## 快速开始（Docker）
 
+镜像由 GitHub Actions 在每次推送到 `main` 时构建，并推送到 GitHub Container Registry。本地**只需拉取，无需构建**：
+
 ```bash
-# 1. 构建并启动（首次构建会下载 Go / npm 依赖）
-docker compose up -d --build
+# 1. 拉取最新镜像并启动
+docker compose pull
+docker compose up -d
 
 # 2. 打开 http://localhost:8080
 #    默认账号 admin / admin123 —— 请务必修改！
+```
+
+镜像地址：`ghcr.io/chouhx/gmailmanager:latest`
+
+### 镜像标签
+
+| 触发方式 | 标签 |
+| --- | --- |
+| 推送到 `main` | `latest`、`main`、`sha-<短哈希>` |
+| 推送 `v1.2.3` 标签 | `1.2.3`、`1.2`、`latest` |
+| Pull Request | 仅构建验证，不推送 |
+
+> GHCR 上的包默认是私有的。首次使用前，到 GitHub → 你的头像 → Packages → `gmailmanager` → Package settings，把可见性改为 Public；或先 `docker login ghcr.io -u <用户名>` 再拉取。
+
+### 从源码构建（可选）
+
+不想用 CI 产物时，用覆盖文件从本地源码构建：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+国内网络较慢时，修改 `docker-compose.build.yml` 里的 `build.args`：
+
+```yaml
+args:
+  NPM_REGISTRY: https://registry.npmmirror.com
+  GOPROXY: https://goproxy.cn,direct
 ```
 
 生产部署请至少设置：
@@ -63,12 +94,13 @@ environment:
 
 > 修改 `GM_SECRET` 后，之前用旧密钥加密的数据将无法解密，请勿随意变更；若不设置，密钥随 `/data` 卷一起持久化。
 
-国内网络构建较慢时，可在 `docker-compose.yml` 的 `build.args` 中改用镜像源：
+### 版本信息
 
-```yaml
-args:
-  NPM_REGISTRY: https://registry.npmmirror.com
-  GOPROXY: https://goproxy.cn,direct
+`GET /api/health` 会返回构建版本与提交号，便于确认线上跑的是哪个镜像：
+
+```bash
+curl -s localhost:8080/api/health
+# {"status":"ok","time":...,"version":"main","commit":"a2f95fb..."}
 ```
 
 ### 数据持久化

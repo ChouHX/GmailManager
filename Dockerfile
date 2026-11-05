@@ -36,11 +36,27 @@ COPY internal/ ./internal/
 # Embed the built frontend
 COPY --from=web /app/web/dist ./web/dist
 
-RUN GOPROXY="$GOPROXY" GOSUMDB=off go build -trimpath -ldflags="-s -w" -o /out/gmailmanager .
+# Injected by CI so the binary can report its build identity.
+ARG VERSION=dev
+ARG COMMIT=none
+
+RUN GOPROXY="$GOPROXY" GOSUMDB=off go build \
+      -trimpath \
+      -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
+      -o /out/gmailmanager .
 
 
 # ---------- stage 3: runtime ----------
 FROM alpine:3.20
+
+ARG VERSION=dev
+ARG COMMIT=none
+
+LABEL org.opencontainers.image.title="Gmail Manager" \
+      org.opencontainers.image.description="Gmail account manager with IMAP fetching" \
+      org.opencontainers.image.source="https://github.com/ChouHX/GmailManager" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT}"
 
 RUN apk add --no-cache ca-certificates tzdata \
  && addgroup -S app && adduser -S -G app app \
