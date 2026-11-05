@@ -1,0 +1,27 @@
+# dependencies
+web/node_modules
+node_modules
+
+# build output
+web/dist/*
+!web/dist/.gitkeep
+web/.vite
+dist
+
+# binaries
+*.exe
+gmailmanager
+gm-test.exe
+
+# runtime data
+data/
+*.db
+*.db-shm
+*.db-wal
+secret.key
+
+# editor / os
+.DS_Store
+Thumbs.db
+.idea
+.vscode

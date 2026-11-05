@@ -1,0 +1,39 @@
+services:
+  gmailmanager:
+    build:
+      context: .
+      args:
+        # 国内网络可改用镜像源，例如：
+        # NPM_REGISTRY: https://registry.npmmirror.com
+        # GOPROXY: https://goproxy.cn,direct
+        NPM_REGISTRY: https://registry.npmjs.org
+        GOPROXY: https://proxy.golang.org,direct
+    image: gmailmanager:latest
+    container_name: gmailmanager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # ---- 管理员（务必修改）----
+      GM_ADMIN_USER: admin
+      GM_ADMIN_PASSWORD: admin123
+      # ---- 加密密钥：留空则自动生成到 /data/secret.key ----
+      # GM_SECRET: change-me-to-a-long-random-string
+      # ---- 数据目录 / 数据库 ----
+      GM_DATA_DIR: /data
+      GM_DB_PATH: /data/gmailmanager.db
+      # ---- IMAP ----
+      GM_IMAP_HOST: imap.gmail.com
+      GM_IMAP_PORT: "993"
+      GM_FETCH_CONCURRENCY: "6"
+      GM_FETCH_TIMEOUT_SECONDS: "60"
+      GM_FETCH_LIMIT: "10"
+      # ---- 会话 / HTTPS ----
+      GM_SESSION_HOURS: "12"
+      GM_COOKIE_SECURE: "false"
+      TZ: Asia/Shanghai
+    volumes:
+      - gmailmanager-data:/data
+
+volumes:
+  gmailmanager-data:

@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.985 0.001 250);
+  --foreground: oklch(0.21 0.006 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.006 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.006 250);
+  --primary: oklch(0.53 0.14 250);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.968 0.002 250);
+  --secondary-foreground: oklch(0.28 0.006 250);
+  --muted: oklch(0.968 0.002 250);
+  --muted-foreground: oklch(0.55 0.008 250);
+  --accent: oklch(0.965 0.003 250);
+  --accent-foreground: oklch(0.24 0.006 250);
+  --destructive: oklch(0.58 0.2 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.918 0.003 250);
+  --input: oklch(0.918 0.003 250);
+  --ring: oklch(0.53 0.14 250);
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.21 0.006 250);
+  --sidebar-accent: oklch(0.965 0.004 250);
+  --sidebar-accent-foreground: oklch(0.24 0.006 250);
+  --sidebar-border: oklch(0.918 0.003 250);
+}
+
+.dark {
+  --background: oklch(0.18 0.005 250);
+  --foreground: oklch(0.96 0.002 250);
+  --card: oklch(0.22 0.006 250);
+  --card-foreground: oklch(0.96 0.002 250);
+  --popover: oklch(0.22 0.006 250);
+  --popover-foreground: oklch(0.96 0.002 250);
+  --primary: oklch(0.66 0.14 250);
+  --primary-foreground: oklch(0.16 0.01 250);
+  --secondary: oklch(0.27 0.006 250);
+  --secondary-foreground: oklch(0.96 0.002 250);
+  --muted: oklch(0.27 0.006 250);
+  --muted-foreground: oklch(0.7 0.006 250);
+  --accent: oklch(0.3 0.008 250);
+  --accent-foreground: oklch(0.96 0.002 250);
+  --destructive: oklch(0.62 0.19 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.66 0.14 250);
+  --sidebar: oklch(0.22 0.006 250);
+  --sidebar-foreground: oklch(0.96 0.002 250);
+  --sidebar-accent: oklch(0.28 0.007 250);
+  --sidebar-accent-foreground: oklch(0.98 0.002 250);
+  --sidebar-border: oklch(1 0 0 / 10%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /*
+   * Font size control.
+   *
+   * The UI is authored with fixed px type sizes, so changing the root font
+   * size would not scale it. `zoom` scales everything uniformly instead, and
+   * #root's height is divided by the same factor so a full-height layout
+   * still fits the viewport without scrollbars.
+   *
+   * --ui-scale is set from FontScaleProvider: base 12px maps to 1.
+   */
+  html {
+    --ui-scale: 1;
+  }
+  #root {
+    zoom: var(--ui-scale);
+    height: calc(100dvh / var(--ui-scale));
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+      sans-serif;
+  }
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--foreground) 22%, transparent);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
