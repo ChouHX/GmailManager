@@ -70,8 +70,15 @@ func TestShareLinkEndToEnd(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Fatalf("public info: %d %s", res.StatusCode, raw)
 	}
+	// The public page intentionally shows the full address of the mailbox.
 	if !strings.Contains(string(raw), "user@gmail.com") {
 		t.Errorf("info should name the account: %s", raw)
+	}
+	// It must never leak credentials, though.
+	for _, secret := range []string{"apppass", "password", "appPassword"} {
+		if strings.Contains(string(raw), secret) {
+			t.Errorf("info must not leak %q: %s", secret, raw)
+		}
 	}
 
 	// Messages (newest 10, includes spam/trash)
@@ -218,3 +225,83 @@ func copyTo(dst *strings.Builder, src interface{ Read([]byte) (int, error) }) (i
 }
 
 var _ = httptest.NewRecorder
+
+// TestBulkLinksWholePool covers "no selection means every account".
+func TestBulkLinksWholePool(t *testing.T) {
+	e := newTestEnv(t)
+	e.login(t)
+
+	if code, body := e.do(t, "POST", "/api/accounts/links", map[string]any{"ids": []int64{}}); code != 200 {
+		t.Fatalf("empty pool bulk links should be a no-op: %d %s", code, body)
+	}
+
+	for _, email := range []string{"a@x.com", "b@x.com", "c@x.com"} {
+		if code, _ := e.do(t, "POST", "/api/accounts", map[string]string{
+			"email": email, "appPassword": "app",
+		}); code != 201 {
+			t.Fatal("create", email)
+		}
+	}
+
+	// No ids: every account gets a link.
+	code, body := e.do(t, "POST", "/api/accounts/links", map[string]any{"ids": []int64{}})
+	if code != 200 {
+		t.Fatalf("bulk links for whole pool: %d %s", code, body)
+	}
+	var bulk struct {
+		Links []struct {
+			AccountID int64  `json:"accountId"`
+			Email     string `json:"email"`
+			Token     string `json:"token"`
+			URL       string `json:"url"`
+		} `json:"links"`
+	}
+	if err := json.Unmarshal(body, &bulk); err != nil {
+		t.Fatal(err)
+	}
+	if len(bulk.Links) != 3 {
+		t.Fatalf("expected 3 links for the whole pool: %s", body)
+	}
+	for _, l := range bulk.Links {
+		if l.Token == "" || !strings.Contains(l.URL, "/f/"+l.Token) {
+			t.Fatalf("bad link: %+v", l)
+		}
+	}
+
+	// Export without ids covers the whole pool too.
+	code, body = e.do(t, "GET", "/api/accounts/links/export", nil)
+	if code != 200 {
+		t.Fatalf("export all: %d %s", code, body)
+	}
+	for _, email := range []string{"a@x.com", "b@x.com", "c@x.com"} {
+		if !strings.Contains(string(body), email) {
+			t.Errorf("export-all missing %s:\n%s", email, body)
+		}
+	}
+	for _, l := range bulk.Links {
+		if !strings.Contains(string(body), l.URL) {
+			t.Errorf("export-all missing url %s", l.URL)
+		}
+	}
+
+	// Regenerating for the same account reuses the token (link stays stable).
+	code, body = e.do(t, "POST", "/api/accounts/links", map[string]any{"ids": []int64{1}})
+	if code != 200 {
+		t.Fatalf("bulk links again: %d %s", code, body)
+	}
+	var again struct {
+		Links []struct {
+			Token string `json:"token"`
+		} `json:"links"`
+	}
+	_ = json.Unmarshal(body, &again)
+	found := false
+	for _, l := range bulk.Links {
+		if l.AccountID == 1 && len(again.Links) == 1 && again.Links[0].Token == l.Token {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("token should stay stable: %s", body)
+	}
+}

@@ -90,19 +90,28 @@ func (s *Server) handleBulkLinks(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
-	if len(req.IDs) == 0 {
-		writeErr(w, http.StatusBadRequest, "请选择账号")
-		return
-	}
 	if len(req.IDs) > 500 {
 		writeErr(w, http.StatusBadRequest, "单次最多处理 500 个账号")
 		return
 	}
 
-	accounts, err := s.store.GetMany(r.Context(), req.IDs)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+	var (
+		accounts []store.Account
+		err      error
+	)
+	if len(req.IDs) == 0 {
+		// No selection means the whole pool.
+		accounts, err = s.store.AllAccounts(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else {
+		accounts, err = s.store.GetMany(r.Context(), req.IDs)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 
 	out := make([]linkDTO, 0, len(accounts))
@@ -223,11 +232,12 @@ func (s *Server) handlePublicInfo(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// The full address is shown on purpose: the public page tells the visitor
+	// which mailbox the link belongs to. No credential is ever exposed.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"email":    acc.Email,
-		"note":     acc.Note,
 		"label":    "取件",
-		"lifetime": "仅可读取该账号最新邮件",
+		"lifetime": "仅可读取该账号最新 10 封邮件",
 	})
 }
 

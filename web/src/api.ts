@@ -167,6 +167,7 @@ export const api = {
   accountLink: (id: number) => request<FetchLink>(`/api/accounts/${id}/link`),
   revokeLink: (id: number) =>
     request<{ ok: boolean }>(`/api/accounts/${id}/link/revoke`, { method: 'POST' }),
+  /** Pass an empty array to generate/reuse links for the whole pool. */
   bulkLinks: (ids: number[]) => request<{ links: FetchLink[] }>('/api/accounts/links', json({ ids })),
   exportLinksUrl: (ids?: number[]) =>
     ids && ids.length ? `/api/accounts/links/export?ids=${ids.join(',')}` : '/api/accounts/links/export',

@@ -230,22 +230,28 @@ export function AccountsPage() {
     }
   }
 
-  /** Ensures links for the selection, then downloads them as a text file. */
+  /**
+   * Generates (or reuses) fetch links and downloads them as a text file.
+   * With nothing selected it exports every account in the pool.
+   */
   const exportLinks = async () => {
-    if (!selected.length) {
-      toast('请先选择账号', 'info')
-      return
-    }
+    const ids = selected.length ? selected : undefined
     setBulkLinkBusy(true)
     try {
-      await api.bulkLinks(selected)
+      // Ensure the links exist first so the text file is complete.
+      await api.bulkLinks(ids ?? [])
       const a = document.createElement('a')
-      a.href = api.exportLinksUrl(selected)
+      a.href = api.exportLinksUrl(ids)
       a.download = ''
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      toast(`已生成并导出 ${selected.length} 个取件链接`, 'success')
+      toast(
+        ids
+          ? `已生成并导出 ${ids.length} 个取件链接`
+          : `已生成并导出全部 ${total} 个账号的取件链接`,
+        'success',
+      )
     } catch (err) {
       toast(err instanceof ApiError ? err.message : '导出链接失败', 'error')
     } finally {
@@ -268,6 +274,15 @@ export function AccountsPage() {
             <Button variant="outline" size="sm" onClick={exportSelected}>
               <Download className="size-3.5" />
               {selected.length ? `导出 (${selected.length})` : '导出全部'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkLinkBusy || total === 0}
+              onClick={() => void exportLinks()}
+            >
+              {bulkLinkBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Link2 className="size-3.5" />}
+              {selected.length ? `取件链接 (${selected.length})` : '导出取件链接'}
             </Button>
             <Button
               variant="outline"
@@ -336,7 +351,7 @@ export function AccountsPage() {
                   ) : (
                     <Link2 className="size-3" />
                   )}
-                  导出链接
+                  导出所选链接
                 </Button>
                 <Button variant="outline" size="xs" className="text-destructive" onClick={() => setBulkDelete(true)}>
                   <Trash2 className="size-3" />
