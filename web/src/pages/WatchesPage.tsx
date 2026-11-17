@@ -189,7 +189,7 @@ export function WatchesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[34px]" />
+                <TableHead className="w-[46px] text-[10px]">启用</TableHead>
                 <TableHead>任务 / 账号</TableHead>
                 <TableHead className="hidden md:table-cell">匹配条件</TableHead>
                 <TableHead className="w-[92px]">间隔</TableHead>
@@ -282,7 +282,7 @@ export function WatchesPage() {
                               size="icon-xs"
                               disabled={busy}
                               onClick={() => void runNow(w)}
-                              aria-label="立即轮询"
+                              aria-label="立即轮询一次"
                             >
                               {busy ? (
                                 <Loader2 className="size-3 animate-spin" />
@@ -291,7 +291,7 @@ export function WatchesPage() {
                               )}
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>立即轮询一次</TooltipContent>
+                          <TooltipContent>立即轮询一次（不影响定时计划）</TooltipContent>
                         </Tooltip>
                         <Button
                           variant="ghost"
