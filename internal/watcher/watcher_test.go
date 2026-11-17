@@ -212,3 +212,81 @@ func TestSchedulerFiresDueTask(t *testing.T) {
 		t.Fatalf("unexpected stored state: %+v", saved)
 	}
 }
+
+func TestRunNowAllAccountsPollsWholePool(t *testing.T) {
+	e := newEnv(t)
+	e.imapSrv.AddUser("other@gmail.com", "apppass")
+
+	enc, err := e.box.Encrypt("apppass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, email := range []string{"user@gmail.com", "other@gmail.com"} {
+		if _, err := e.store.Create(context.Background(), store.Account{Email: email, AppPassword: enc}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An account without an app password must be skipped, not fail the run.
+	if _, err := e.store.Create(context.Background(), store.Account{Email: "nopass@gmail.com"}); err != nil {
+		t.Fatal(err)
+	}
+
+	task := store.Watch{AccountID: store.AllAccountsID, Enabled: true, Subject: "inbox",
+		Folder: imapx.FolderInbox, Interval: 60, WebhookURL: e.hookURL}
+	id, err := e.store.CreateWatch(context.Background(), task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.ID = id
+
+	res, err := e.watcher.RunNow(context.Background(), task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK {
+		t.Fatalf("expected ok, got %+v", res)
+	}
+	if res.Accounts != 3 {
+		t.Fatalf("expected 3 accounts considered, got %d", res.Accounts)
+	}
+	// Two mailboxes share the same INBOX, which holds 2 matching messages.
+	if len(res.Hits) != 4 {
+		t.Fatalf("expected 4 hits, got %d (%+v)", len(res.Hits), res.Hits)
+	}
+	if len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "nopass@gmail.com") {
+		t.Fatalf("expected the passwordless account to be skipped, got %+v", res.Skipped)
+	}
+	if !res.Notified || e.hits.Load() != 1 {
+		t.Fatalf("expected one webhook call, got %d", e.hits.Load())
+	}
+
+	saved, err := e.store.GetWatch(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.LastStatus != "ok" || saved.TotalHits != 4 {
+		t.Fatalf("unexpected stored state: %+v", saved)
+	}
+	// All-accounts tasks carry no single email.
+	if saved.Email != "" {
+		t.Fatalf("all-accounts task should not expose an email, got %q", saved.Email)
+	}
+}
+
+func TestRunNowEmptyPool(t *testing.T) {
+	e := newEnv(t)
+	task := store.Watch{AccountID: store.AllAccountsID, Enabled: true, Subject: "x",
+		Interval: 60, WebhookURL: e.hookURL}
+	id, err := e.store.CreateWatch(context.Background(), task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.ID = id
+	res, err := e.watcher.RunNow(context.Background(), task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.OK || !strings.Contains(res.Error, "号池为空") {
+		t.Fatalf("unexpected: %+v", res)
+	}
+}

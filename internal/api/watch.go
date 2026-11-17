@@ -54,7 +54,7 @@ func validFolder(f string) bool {
 
 // validate returns a user-facing error message, or "" when the task is valid.
 func (r watchReq) validate() string {
-	if r.AccountID == 0 {
+	if r.AccountID < 0 {
 		return "请选择要轮询的账号"
 	}
 	if strings.TrimSpace(r.Subject) == "" && strings.TrimSpace(r.From) == "" {
@@ -73,6 +73,23 @@ func (r watchReq) validate() string {
 		return "请填写有效的 Discord webhook 链接"
 	}
 	return ""
+}
+
+// checkWatchAccount validates the target: 0 means the whole pool.
+func (s *Server) checkWatchAccount(w http.ResponseWriter, r *http.Request, accountID int64) error {
+	if accountID == store.AllAccountsID {
+		return nil
+	}
+	_, err := s.store.Get(r.Context(), accountID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		writeErr(w, http.StatusBadRequest, "账号不存在")
+		return err
+	case err != nil:
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return err
+	}
+	return nil
 }
 
 // GET /api/watches
@@ -100,11 +117,7 @@ func (s *Server) handleCreateWatch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
-	if _, err := s.store.Get(r.Context(), req.AccountID); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusBadRequest, "账号不存在")
-		return
-	} else if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	if err := s.checkWatchAccount(w, r, req.AccountID); err != nil {
 		return
 	}
 	task := req.apply(store.Watch{Enabled: true})
@@ -140,11 +153,7 @@ func (s *Server) handleUpdateWatch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
-	if _, err := s.store.Get(r.Context(), req.AccountID); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusBadRequest, "账号不存在")
-		return
-	} else if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	if err := s.checkWatchAccount(w, r, req.AccountID); err != nil {
 		return
 	}
 	task := req.apply(existing)

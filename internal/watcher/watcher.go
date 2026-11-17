@@ -103,7 +103,7 @@ func (w *Watcher) tick(ctx context.Context) {
 
 	now := time.Now().Unix()
 	for _, task := range tasks {
-		if task.Interval <= 0 || task.AccountID == 0 {
+		if task.Interval <= 0 {
 			continue
 		}
 		interval := int64(task.Interval)
@@ -159,6 +159,10 @@ type RunResult struct {
 	Notified   bool            `json:"notified"`
 	NotifyErr  string          `json:"notifyError,omitempty"`
 	DurationMS int64           `json:"durationMs"`
+	// Accounts is the number of mailboxes polled (1 for a single account).
+	Accounts int `json:"accounts"`
+	// Skipped lists accounts that could not be polled, e.g. no app password.
+	Skipped []string `json:"skipped,omitempty"`
 }
 
 // RunNow executes one poll immediately, ignoring the schedule.
@@ -184,75 +188,107 @@ func (w *Watcher) RunNow(ctx context.Context, task store.Watch) (RunResult, erro
 	if !task.Enabled {
 		return finish("disabled", "任务已停用")
 	}
-	if task.AccountID == 0 {
-		return finish("error", "未绑定账号")
-	}
-
-	acc, err := w.store.Get(ctx, task.AccountID)
-	if errors.Is(err, store.ErrNotFound) {
-		return finish("error", "账号已被删除")
-	}
-	if err != nil {
-		return finish("error", err.Error())
-	}
-	appPass, err := w.box.Decrypt(acc.AppPassword)
-	if err != nil {
-		return finish("error", "应用专用密码解密失败: "+err.Error())
-	}
-	if strings.TrimSpace(appPass) == "" {
-		return finish("error", "该账号未配置应用专用密码")
-	}
 	rule, err := matcher.CompileRule(task.Subject, task.From)
 	if err != nil {
 		return finish("error", "匹配规则无效: "+err.Error())
 	}
 
+	accounts, err := w.taskAccounts(ctx, task)
+	if err != nil {
+		return finish("error", err.Error())
+	}
+	if len(accounts) == 0 {
+		return finish("error", "号池为空，没有可轮询的账号")
+	}
+	res.Accounts = len(accounts)
+
 	folder := task.Folder
 	if folder == "" {
 		folder = imapx.FolderInbox
 	}
-	cred := imapx.Credentials{Email: acc.Email, AppPassword: strings.ReplaceAll(appPass, " ", "")}
-	fetchRes, err := w.fetcher.Latest(ctx, cred, MessageLimit, folder)
-	if err != nil && fetchRes.Error == "" {
-		fetchRes.Error = err.Error()
+
+	type hit struct {
+		email string
+		msg   imapx.Summary
 	}
-	if fetchRes.Error != "" {
-		return finish("error", fetchRes.Error)
-	}
-	res.Fetched = len(fetchRes.Messages)
-	for _, m := range fetchRes.Messages {
-		if rule.Match(m.Subject, m.From) {
-			res.Hits = append(res.Hits, m)
+	var found []hit
+	var firstErr string
+	okCount := 0
+	for _, acc := range accounts {
+		if err := ctx.Err(); err != nil {
+			break
+		}
+		appPass, err := w.box.Decrypt(acc.AppPassword)
+		if err != nil {
+			res.Skipped = append(res.Skipped, acc.Email+"（解密失败）")
+			continue
+		}
+		if strings.TrimSpace(appPass) == "" {
+			res.Skipped = append(res.Skipped, acc.Email+"（无应用专用密码）")
+			continue
+		}
+		cred := imapx.Credentials{Email: acc.Email, AppPassword: strings.ReplaceAll(appPass, " ", "")}
+		fetchRes, err := w.fetcher.Latest(ctx, cred, MessageLimit, folder)
+		if err != nil && fetchRes.Error == "" {
+			fetchRes.Error = err.Error()
+		}
+		if fetchRes.Error != "" {
+			res.Skipped = append(res.Skipped, acc.Email+"（"+fetchRes.Error+"）")
+			if firstErr == "" {
+				firstErr = acc.Email + ": " + fetchRes.Error
+			}
+			continue
+		}
+		okCount++
+		res.Fetched += len(fetchRes.Messages)
+
+		// Keep the account row in sync so the UI shows fresh state.
+		mark := store.MarkFetch{ID: acc.ID, Status: "ok"}
+		if len(fetchRes.Messages) > 0 {
+			top := fetchRes.Messages[0]
+			mark.Subject, mark.From, mark.Date, mark.Seen = top.Subject, top.From, top.Date, top.Seen
+		}
+		_ = w.store.SetFetchResult(ctx, mark)
+
+		for _, m := range fetchRes.Messages {
+			if rule.Match(m.Subject, m.From) {
+				found = append(found, hit{email: acc.Email, msg: m})
+			}
 		}
 	}
-
-	// Keep the account row in sync so the UI shows fresh state.
-	mark := store.MarkFetch{ID: acc.ID, Status: "ok"}
-	if len(fetchRes.Messages) > 0 {
-		top := fetchRes.Messages[0]
-		mark.Subject, mark.From, mark.Date, mark.Seen = top.Subject, top.From, top.Date, top.Seen
+	// No mailbox could be polled: report it instead of a silent "ok".
+	if okCount == 0 {
+		if firstErr == "" && len(res.Skipped) > 0 {
+			firstErr = res.Skipped[0]
+		}
+		if firstErr == "" {
+			firstErr = "没有可轮询的账号"
+		}
+		return finish("error", firstErr)
 	}
-	_ = w.store.SetFetchResult(ctx, mark)
+	for _, h := range found {
+		res.Hits = append(res.Hits, h.msg)
+	}
 
 	if len(res.Hits) == 0 {
 		return finish("ok", "")
 	}
 
 	hits := make([]notify.Hit, 0, len(res.Hits))
-	for _, m := range res.Hits {
+	for _, h := range found {
 		hits = append(hits, notify.Hit{
-			AccountEmail: acc.Email,
-			Subject:      m.Subject,
-			From:         m.From,
-			Date:         m.Date,
-			Folder:       m.FolderLabel,
-			UID:          m.UID,
-			Snippet:      m.Snippet,
+			AccountEmail: h.email,
+			Subject:      h.msg.Subject,
+			From:         h.msg.From,
+			Date:         h.msg.Date,
+			Folder:       h.msg.FolderLabel,
+			UID:          h.msg.UID,
+			Snippet:      h.msg.Snippet,
 		})
 	}
 	name := task.Name
 	if strings.TrimSpace(name) == "" {
-		name = acc.Email
+		name = accountLabel(task, accounts)
 	}
 	if err := w.notify.Notify(ctx, task.WebhookURL, name, hits); err != nil {
 		res.NotifyErr = err.Error()
@@ -260,8 +296,34 @@ func (w *Watcher) RunNow(ctx context.Context, task store.Watch) (RunResult, erro
 		return finish("error", "命中 "+fmt.Sprint(len(hits))+" 封，但 webhook 推送失败: "+err.Error())
 	}
 	res.Notified = true
-	log.Printf("watcher: task %d (%s) hit %d message(s), webhook sent", task.ID, acc.Email, len(hits))
+	log.Printf("watcher: task %d (%s) hit %d message(s) across %d account(s), webhook sent", task.ID, name, len(hits), res.Accounts)
 	return finish("ok", "")
+}
+
+// taskAccounts resolves the mailboxes a task polls.
+func (w *Watcher) taskAccounts(ctx context.Context, task store.Watch) ([]store.Account, error) {
+	if task.AccountID == store.AllAccountsID {
+		return w.store.AllAccounts(ctx)
+	}
+	acc, err := w.store.Get(ctx, task.AccountID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, errors.New("账号已被删除")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return []store.Account{acc}, nil
+}
+
+// accountLabel names a task in notifications when it has no explicit name.
+func accountLabel(task store.Watch, accounts []store.Account) string {
+	if task.AccountID == store.AllAccountsID {
+		return fmt.Sprintf("全部账号（%d 个）", len(accounts))
+	}
+	if len(accounts) == 1 {
+		return accounts[0].Email
+	}
+	return "邮件命中"
 }
 
 // TestWebhook sends a sample notification so users can verify a webhook URL.

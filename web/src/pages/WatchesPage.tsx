@@ -214,7 +214,7 @@ export function WatchesPage() {
                     <TableCell className="max-w-[240px]">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate text-[12px] font-medium">
-                          {w.name || w.email || '未命名任务'}
+                          {w.name || (w.accountId === 0 ? '全部账号' : w.email) || '未命名任务'}
                         </span>
                         {w.lastStatus === 'error' && (
                           <Badge variant="destructive">错误</Badge>
@@ -224,7 +224,7 @@ export function WatchesPage() {
                         )}
                       </div>
                       <p className="truncate text-[10.5px] text-muted-foreground">
-                        {w.email || `账号 #${w.accountId}`}
+                        {w.accountId === 0 ? '全部账号（号池）' : w.email || `账号 #${w.accountId}`}
                         {w.folder ? ` · ${folderLabel(w.folder)}` : ''}
                       </p>
                       {w.lastError ? (
@@ -342,7 +342,8 @@ export function WatchesPage() {
           <DialogHeader>
             <DialogTitle>删除轮询任务</DialogTitle>
             <DialogDescription>
-              确认删除「{confirm?.name || confirm?.email}」？删除后不再轮询该任务。
+              确认删除「{confirm?.name || (confirm?.accountId === 0 ? '全部账号' : confirm?.email)}」？
+              删除后不再轮询该任务。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -10,8 +10,12 @@ import (
 // ErrWatchNotFound is returned when a watch task does not exist.
 var ErrWatchNotFound = errors.New("watch not found")
 
-// Watch is a scheduled IMAP poll for one account. A task matches when the
-// subject and/or sender patterns hit; every hit pushes a Discord webhook.
+// AllAccountsID as AccountID means the task polls the whole pool.
+const AllAccountsID int64 = 0
+
+// Watch is a scheduled IMAP poll. A task matches when the subject and/or
+// sender patterns hit; every hit pushes a Discord webhook. AccountID 0 means
+// "every account in the pool".
 type Watch struct {
 	ID         int64  `json:"id"`
 	AccountID  int64  `json:"accountId"`
@@ -37,7 +41,7 @@ type Watch struct {
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
-const watchColumns = `w.id, w.account_id, COALESCE(a.email, ''), w.name, w.enabled, w.subject, w.from_addr,
+const watchColumns = `w.id, w.account_id, CASE WHEN w.account_id = 0 THEN '' ELSE COALESCE(a.email, '') END, w.name, w.enabled, w.subject, w.from_addr,
 	w.folder, w.interval_seconds, w.webhook_url, w.last_run_at, w.last_status, w.last_error,
 	w.last_hit_at, w.last_hit_count, w.total_hits, w.last_notified_at, w.last_duration_ms,
 	w.created_at, w.updated_at`

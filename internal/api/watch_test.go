@@ -330,3 +330,68 @@ func TestClearAccountPoolRequiresAuth(t *testing.T) {
 		t.Fatalf("expected 401, got %d", code)
 	}
 }
+
+func TestWatchAllAccountsTarget(t *testing.T) {
+	e, imapSrv := newIMAPEnv(t)
+	imapSrv.AddUser("other@gmail.com", "apppass")
+	e.login(t)
+
+	rec := &webhookRecorder{}
+	hookSrv := httptest.NewServer(rec)
+	t.Cleanup(hookSrv.Close)
+	hook := hookSrv.URL + "/api/webhooks/1/token"
+
+	for _, email := range []string{"user@gmail.com", "other@gmail.com"} {
+		if code, body := e.do(t, "POST", "/api/accounts", map[string]string{
+			"email": email, "password": "pw", "appPassword": "apppass",
+		}); code != 201 {
+			t.Fatalf("create account: %d %s", code, body)
+		}
+	}
+
+	// accountId 0 means "the whole pool" and must be accepted without an account.
+	code, body := e.do(t, "POST", "/api/watches", map[string]any{
+		"accountId": 0, "name": "全池监控", "subject": "inbox",
+		"folder": "inbox", "intervalSeconds": 60, "webhookUrl": hook,
+	})
+	if code != 201 {
+		t.Fatalf("create all-accounts watch: %d %s", code, body)
+	}
+	// Unknown account ids are still rejected.
+	code, body = e.do(t, "POST", "/api/watches", map[string]any{
+		"accountId": 999, "subject": "x", "intervalSeconds": 60, "webhookUrl": hook,
+	})
+	if code != 400 {
+		t.Fatalf("expected 400 for unknown account, got %d %s", code, body)
+	}
+
+	code, body = e.do(t, "POST", "/api/watches/1/run", nil)
+	if code != 200 {
+		t.Fatalf("run: %d %s", code, body)
+	}
+	var res struct {
+		OK       bool `json:"ok"`
+		Accounts int  `json:"accounts"`
+		Notified bool `json:"notified"`
+		Hits     []struct {
+			Subject string `json:"subject"`
+		} `json:"hits"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK || res.Accounts != 2 || len(res.Hits) != 4 || !res.Notified {
+		t.Fatalf("unexpected run result: %s", body)
+	}
+	if rec.count() != 1 {
+		t.Fatalf("expected 1 webhook call, got %d", rec.count())
+	}
+
+	code, body = e.do(t, "GET", "/api/watches", nil)
+	if code != 200 {
+		t.Fatalf("list: %d %s", code, body)
+	}
+	if !strings.Contains(string(body), `"accountId":0`) {
+		t.Fatalf("expected accountId 0 in list, got %s", body)
+	}
+}

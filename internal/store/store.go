@@ -248,6 +248,25 @@ func (s *Store) List(ctx context.Context, p ListParams) ([]Account, int, error) 
 	return out, total, rows.Err()
 }
 
+// AllAccounts returns every account, oldest id first. Used by watch tasks that
+// poll the whole pool.
+func (s *Store) AllAccounts(ctx context.Context) ([]Account, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT "+accountColumns+" FROM accounts ORDER BY id ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Account{}
+	for rows.Next() {
+		a, err := scanAccount(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // Get returns one account by id.
 func (s *Store) Get(ctx context.Context, id int64) (Account, error) {
 	row := s.db.QueryRowContext(ctx, "SELECT "+accountColumns+" FROM accounts WHERE id = ?", id)

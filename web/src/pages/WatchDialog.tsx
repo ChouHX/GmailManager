@@ -49,8 +49,11 @@ interface FormState {
   enabled: boolean
 }
 
+/** accountId "0" targets the whole pool. */
+const ALL_ACCOUNTS = '0'
+
 const EMPTY: FormState = {
-  accountId: '',
+  accountId: ALL_ACCOUNTS,
   name: '',
   subject: '',
   from: '',
@@ -106,8 +109,7 @@ export function WatchDialog({ open, watch, onClose, onSaved }: WatchDialogProps)
   const intervalValid = Number.isFinite(interval) && interval >= 30 && interval <= 86400
   const hasCondition = Boolean(form.subject.trim() || form.from.trim())
   const webhookValid = /^https?:\/\/.+\/api\/webhooks\//i.test(form.webhookUrl.trim())
-  const canSave =
-    Boolean(form.accountId) && hasCondition && intervalValid && webhookValid && !busy
+  const canSave = hasCondition && intervalValid && webhookValid && !busy
 
   const set = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }))
@@ -175,21 +177,19 @@ export function WatchDialog({ open, watch, onClose, onSaved }: WatchDialogProps)
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
           <div className="space-y-1">
-            <Label className="text-[11px] text-muted-foreground">轮询账号</Label>
+            <Label className="text-[11px] text-muted-foreground">轮询范围</Label>
             <Select
               value={form.accountId}
               onValueChange={(v) => setForm((prev) => ({ ...prev, accountId: v }))}
               disabled={busy}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="选择要轮询的邮箱" />
+                <SelectValue placeholder="选择轮询范围" />
               </SelectTrigger>
               <SelectContent>
-                {accounts.length === 0 && (
-                  <SelectItem value="__none" disabled>
-                    暂无账号，请先在账号管理中导入
-                  </SelectItem>
-                )}
+                <SelectItem value={ALL_ACCOUNTS} className="text-[12px]">
+                  全部账号（号池 {accounts.length} 个）
+                </SelectItem>
                 {accounts.map((a) => (
                   <SelectItem key={a.id} value={String(a.id)} className="text-[12px]">
                     {a.email}
@@ -197,6 +197,9 @@ export function WatchDialog({ open, watch, onClose, onSaved }: WatchDialogProps)
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-[10px] text-muted-foreground/85">
+              默认轮询号池中全部账号；也可只监控某一个邮箱。
+            </p>
           </div>
 
           <div className="space-y-1">
