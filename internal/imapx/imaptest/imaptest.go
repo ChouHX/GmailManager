@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"time"
 
@@ -59,7 +60,9 @@ func Start(username, password string, boxes []*Mailbox) (*Server, error) {
 	be := &backendImpl{users: map[string]*user{username: u}}
 	srv := server.New(be)
 	srv.AllowInsecureAuth = true
-	srv.ErrorLog = nil
+	// go-imap logs disconnects through Server.ErrorLog without a nil check, so
+	// a nil logger would panic on abrupt client closes. Discard instead.
+	srv.ErrorLog = log.New(io.Discard, "", 0)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
