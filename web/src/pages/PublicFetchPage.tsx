@@ -333,7 +333,7 @@ export function PublicFetchPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-full flex-col bg-background">
-      <div className="flex flex-1 flex-col overflow-hidden border-border bg-card sm:mx-auto sm:my-6 sm:max-w-3xl sm:rounded-xl sm:border sm:shadow-sm">
+      <div className="flex w-full flex-1 flex-col overflow-hidden border-border bg-card sm:mx-auto sm:my-6 sm:max-w-3xl sm:rounded-xl sm:border sm:shadow-sm">
         {children}
       </div>
     </div>
