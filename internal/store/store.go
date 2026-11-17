@@ -364,6 +364,30 @@ func (s *Store) DeleteMany(ctx context.Context, ids []int64) (int64, error) {
 	return res.RowsAffected()
 }
 
+// ClearAccounts removes every account together with their share links and
+// watch tasks. It returns the number of deleted accounts.
+func (s *Store) ClearAccounts(ctx context.Context) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, q := range []string{"DELETE FROM fetch_links", "DELETE FROM watches", "DELETE FROM accounts"} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return 0, err
+		}
+	}
+	var removed int64
+	if err := tx.QueryRowContext(ctx, "SELECT changes()").Scan(&removed); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return removed, nil
+}
+
 // Upsert inserts or updates by email. It reports whether a row was inserted.
 func (s *Store) Upsert(ctx context.Context, a Account, overwrite bool) (bool, error) {
 	now := time.Now().Unix()

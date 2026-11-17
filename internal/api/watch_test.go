@@ -260,3 +260,73 @@ func TestWatchDeletedWithAccount(t *testing.T) {
 	}
 	_ = watcher.MessageLimit
 }
+
+func TestClearAccountPool(t *testing.T) {
+	e := newTestEnv(t)
+	e.login(t)
+
+	for _, email := range []string{"a@gmail.com", "b@gmail.com", "c@gmail.com"} {
+		if code, body := e.do(t, "POST", "/api/accounts", map[string]string{
+			"email": email, "password": "pw", "appPassword": "apppass",
+		}); code != 201 {
+			t.Fatalf("create account: %d %s", code, body)
+		}
+	}
+	if code, body := e.do(t, "POST", "/api/watches", map[string]any{
+		"accountId": 1, "subject": "x", "intervalSeconds": 60,
+		"webhookUrl": "https://discord.com/api/webhooks/1/abc",
+	}); code != 201 {
+		t.Fatalf("create watch: %d %s", code, body)
+	}
+	if code, body := e.do(t, "GET", "/api/accounts/1/link", nil); code != 200 {
+		t.Fatalf("ensure link: %d %s", code, body)
+	}
+
+	// Wrong / missing confirmation phrase must be rejected.
+	for _, body := range []map[string]string{{}, {"confirm": "清空吧"}, {"confirm": "clear"}} {
+		code, resp := e.do(t, "POST", "/api/accounts/clear", body)
+		if code != 400 {
+			t.Fatalf("expected 400 for %v, got %d %s", body, code, resp)
+		}
+	}
+	if code, body := e.do(t, "GET", "/api/accounts", nil); code != 200 || !strings.Contains(string(body), `"total":3`) {
+		t.Fatalf("accounts should be untouched: %d %s", code, body)
+	}
+
+	code, body := e.do(t, "POST", "/api/accounts/clear", map[string]string{"confirm": "清空"})
+	if code != 200 || !strings.Contains(string(body), `"deleted":3`) {
+		t.Fatalf("clear: %d %s", code, body)
+	}
+
+	code, body = e.do(t, "GET", "/api/accounts", nil)
+	if code != 200 || !strings.Contains(string(body), `"total":0`) {
+		t.Fatalf("expected empty pool, got %d %s", code, body)
+	}
+	code, body = e.do(t, "GET", "/api/watches", nil)
+	if code != 200 || !strings.Contains(string(body), `"items":[]`) {
+		t.Fatalf("watches should be cleared too, got %d %s", code, body)
+	}
+	code, body = e.do(t, "GET", "/api/accounts/links/export", nil)
+	if code != 200 {
+		t.Fatalf("links export: %d %s", code, body)
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			t.Fatalf("links should be cleared too, got line %q", line)
+		}
+	}
+
+	// Clearing an already empty pool is a no-op, not an error.
+	code, body = e.do(t, "POST", "/api/accounts/clear", map[string]string{"confirm": "清空"})
+	if code != 200 || !strings.Contains(string(body), `"deleted":0`) {
+		t.Fatalf("second clear: %d %s", code, body)
+	}
+}
+
+func TestClearAccountPoolRequiresAuth(t *testing.T) {
+	e := newTestEnv(t)
+	if code, _ := e.do(t, "POST", "/api/accounts/clear", map[string]string{"confirm": "清空"}); code != 401 {
+		t.Fatalf("expected 401, got %d", code)
+	}
+}

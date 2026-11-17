@@ -13,6 +13,7 @@ import {
   Search,
   Trash2,
   Upload,
+  Eraser,
   Download,
   ExternalLink,
 } from 'lucide-react'
@@ -52,6 +53,9 @@ import Loader from '@/components/kokonutui/loader'
 
 const PAGE_SIZE = 10
 
+/** Confirmation phrase required by the backend for the destructive clear. */
+const CLEAR_PHRASE = '清空'
+
 export function AccountsPage() {
   const { toast } = useToast()
   const [rows, setRows] = useState<Account[]>([])
@@ -67,6 +71,9 @@ export function AccountsPage() {
   const [editing, setEditing] = useState<Account | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [bulkDelete, setBulkDelete] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
+  const [clearInput, setClearInput] = useState('')
+  const [clearBusy, setClearBusy] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [linkFor, setLinkFor] = useState<Account | null>(null)
   const [linkBusy, setLinkBusy] = useState(false)
@@ -152,6 +159,28 @@ export function AccountsPage() {
     }
   }
 
+  /** Wipes every account, share link and watch task. */
+  const handleClearPool = async () => {
+    if (clearInput.trim() !== CLEAR_PHRASE) {
+      toast(`请输入「${CLEAR_PHRASE}」以确认`, 'warning')
+      return
+    }
+    setClearBusy(true)
+    try {
+      const res = await api.clearAccounts(CLEAR_PHRASE)
+      toast(res.deleted ? `号池已清空，共删除 ${res.deleted} 个账号` : '号池已经是空的', 'success')
+      setClearOpen(false)
+      setClearInput('')
+      setSelected([])
+      setPage(1)
+      void load({ silent: true })
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : '清空失败', 'error')
+    } finally {
+      setClearBusy(false)
+    }
+  }
+
   const copyValue = async (value: string, label: string) => {
     const ok = await copyText(value)
     toast(ok ? `${label} 已复制` : '复制失败', ok ? 'success' : 'error')
@@ -220,6 +249,19 @@ export function AccountsPage() {
             <Button variant="outline" size="sm" onClick={exportSelected}>
               <Download className="size-3.5" />
               {selected.length ? `导出 (${selected.length})` : '导出全部'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              disabled={total === 0}
+              onClick={() => {
+                setClearInput('')
+                setClearOpen(true)
+              }}
+            >
+              <Eraser className="size-3.5" />
+              清空号池
             </Button>
             <Button
               size="sm"
@@ -557,6 +599,67 @@ export function AccountsPage() {
       >
         确认删除选中的 {selected.length} 个账号？此操作不可撤销。
       </ConfirmDialog>
+
+      <Dialog
+        open={clearOpen}
+        onOpenChange={(v) => {
+          if (!v && !clearBusy) {
+            setClearOpen(false)
+            setClearInput('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton={!clearBusy}>
+          <DialogHeader>
+            <DialogTitle className="text-destructive">清空号池</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                <p>
+                  将删除全部 <strong className="text-foreground">{total}</strong> 个账号，同时清理它们的
+                  取件链接与定时轮询任务。此操作不可撤销，建议先导出备份。
+                </p>
+                <p>
+                  请输入 <strong className="text-destructive">{CLEAR_PHRASE}</strong> 以确认：
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-4">
+            <Input
+              autoFocus
+              value={clearInput}
+              onChange={(e) => setClearInput(e.target.value)}
+              placeholder={CLEAR_PHRASE}
+              disabled={clearBusy}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && clearInput.trim() === CLEAR_PHRASE) void handleClearPool()
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={clearBusy}
+              onClick={() => {
+                setClearOpen(false)
+                setClearInput('')
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={clearBusy || clearInput.trim() !== CLEAR_PHRASE}
+              onClick={() => void handleClearPool()}
+            >
+              {clearBusy && <Loader2 className="size-3.5 animate-spin" />}
+              {clearBusy ? '清空中…' : '确认清空'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <TotpDialog account={totpFor} totp={totp} onClose={() => setTotpFor(null)} onCopy={copyValue} />
 

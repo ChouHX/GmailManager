@@ -98,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/accounts/{id}", s.auth(s.handleUpdateAccount))
 	mux.HandleFunc("DELETE /api/accounts/{id}", s.auth(s.handleDeleteAccount))
 	mux.HandleFunc("POST /api/accounts/batch-delete", s.auth(s.handleBatchDelete))
+	mux.HandleFunc("POST /api/accounts/clear", s.auth(s.handleClearAccounts))
 	mux.HandleFunc("POST /api/accounts/import", s.auth(s.handleImport))
 	mux.HandleFunc("GET /api/accounts/export", s.auth(s.handleExport))
 	mux.HandleFunc("POST /api/accounts/{id}/verify", s.auth(s.handleVerify))
@@ -528,6 +529,30 @@ func (s *Server) handleBatchDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": n})
+}
+
+// handleClearAccounts wipes the whole account pool (credentials, share links
+// and watch tasks). A confirm phrase is required so it cannot be triggered by
+// an accidental click.
+func (s *Server) handleClearAccounts(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Confirm string `json:"confirm"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if strings.TrimSpace(req.Confirm) != "清空" {
+		writeErr(w, http.StatusBadRequest, "请输入「清空」以确认操作")
+		return
+	}
+	removed, err := s.store.ClearAccounts(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	log.Printf("account pool cleared: %d accounts removed", removed)
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": removed})
 }
 
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {

@@ -153,6 +153,9 @@ export const api = {
     request<{ ok: boolean }>(`/api/accounts/${id}`, { ...json(input), method: 'PUT' }),
   deleteAccount: (id: number) => request<{ ok: boolean }>(`/api/accounts/${id}`, { method: 'DELETE' }),
   deleteAccounts: (ids: number[]) => request<{ deleted: number }>('/api/accounts/batch-delete', json({ ids })),
+  /** Wipes the whole account pool (accounts, share links and watch tasks). */
+  clearAccounts: (confirm: string) =>
+    request<{ deleted: number }>('/api/accounts/clear', json({ confirm })),
   importAccounts: (content: string, overwrite: boolean) =>
     request<ImportResult>('/api/accounts/import', json({ content, overwrite })),
   exportUrl: (ids?: number[]) =>
