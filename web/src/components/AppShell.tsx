@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Inbox,
   Menu,
+  Radio,
   Settings2,
   ShieldCheck,
   Users,
@@ -33,11 +34,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import ProfileDropdown from '@/components/kokonutui/profile-dropdown'
 
-export type Route = 'accounts' | 'fetch' | 'settings'
+export type Route = 'accounts' | 'fetch' | 'watches' | 'settings'
 
 const NAV: { key: Route; label: string; hint: string; icon: LucideIcon }[] = [
   { key: 'accounts', label: '账号管理', hint: '导入 / 编辑 / 导出', icon: Users },
   { key: 'fetch', label: '账号取件', hint: 'IMAP 批量 / 单取', icon: Inbox },
+  { key: 'watches', label: '定时轮询', hint: '条件匹配 + Discord 通知', icon: Radio },
   { key: 'settings', label: '设置', hint: '部署与安全', icon: Settings2 },
 ]
 

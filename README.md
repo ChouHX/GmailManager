@@ -42,6 +42,16 @@ Gmail 账号管理与 IMAP 取件控制台。**React + shadcn/ui + KokonutUI + T
 - 批量取件时底部 KokonutUI **StatusIsland** 实时显示每个账号的结果，悬停/点击可展开完整列表
 - 失败原因直接显示在表格里，悬停可看完整错误
 
+### 3. 定时轮询 + Discord 通知
+- 顶部导航 **定时轮询**：为任意账号创建后台轮询任务，按设定的间隔（最小 30 秒，最大 24 小时）自动检查该账号最近 **5 封**邮件
+- 匹配条件可选：**邮件标题** 与 **发件人**，两者同时填写时为「且」关系；都不填不允许保存
+- 匹配语法：纯文本 = 包含匹配（忽略大小写）、`*` = 通配、`re:正则` = 正则、`case:` 前缀 = 区分大小写
+  - 例：`*验证码*`、`@bank.com`、`re:^INVOICE-\d+$`、`case:OTP`
+- 命中后通过 **Discord webhook** 推送（一条消息内最多 10 条 embed，超出自动分批），含账号、标题、发件人、时间、位置与摘要
+- 任务支持启用 / 停用、**立即轮询一次**（不受间隔限制）、编辑、删除；停用或删除账号时关联任务一并清理
+- 表格实时展示上次轮询时间、命中次数、错误原因；页面每 15 秒自动刷新，轮询器每 5 秒检查一次到期任务
+- Webhook 链接可在 Dialog 内一键 **测试**，确认频道配置正确
+
 ## 快速开始（Docker）
 
 镜像由 GitHub Actions 在每次推送到 `main` 时构建，并推送到 GitHub Container Registry。本地**只需拉取，无需构建**：
@@ -160,6 +170,9 @@ internal/store              SQLite 数据访问、导入导出格式
 internal/secret             AES-256-GCM 加密
 internal/totp               TOTP 计算
 internal/imapx              IMAP 取件与 MIME 解析
+internal/matcher            标题 / 发件人匹配（包含、通配、正则）
+internal/notify             Discord webhook 推送
+internal/watcher            定时轮询调度器
 internal/api                HTTP API、会话、中间件
 web/                        React + shadcn/ui + KokonutUI 前端（Vite）
 Dockerfile                  三阶段构建（前端 → Go → alpine 运行时）
@@ -172,4 +185,4 @@ docker-compose.yml          一键部署
 go test ./...
 ```
 
-覆盖：导入导出格式解析、账号 CRUD 与分页、加密往返与错误密钥、TOTP 标准测试向量、IMAP 取件（内置内存 IMAP 服务器，验证收件箱/垃圾箱/已删除合并、数量限制、错误密码、邮件详情与 HTML 净化）、HTTP API 全流程（登录鉴权、CRUD、导入、批量取件参数校验、SPA 回退）。
+覆盖：匹配规则（包含 / 通配 / 正则 / 大小写）、Discord 推送（embed 组装、分批、错误码）、轮询任务（命中推送、无命中不推送、webhook 失败、停用与缺应用密码、调度器自动触发、账号删除级联清理）、导入导出格式解析、账号 CRUD 与分页、加密往返与错误密钥、TOTP 标准测试向量、IMAP 取件（内置内存 IMAP 服务器，验证收件箱/垃圾箱/已删除合并、数量限制、错误密码、邮件详情与 HTML 净化）、HTTP API 全流程（登录鉴权、CRUD、导入、批量取件参数校验、SPA 回退）。

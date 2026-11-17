@@ -78,6 +78,9 @@ func Open(path string) (*Store, error) {
 // Close releases the database handle.
 func (s *Store) Close() error { return s.db.Close() }
 
+// DB exposes the raw handle so tests can seed rows directly.
+func (s *Store) DB() *sql.DB { return s.db }
+
 func (s *Store) migrate() error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -111,6 +114,30 @@ CREATE TABLE IF NOT EXISTS fetch_links (
 );
 CREATE INDEX IF NOT EXISTS idx_links_account ON fetch_links(account_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_links_token ON fetch_links(token);
+
+CREATE TABLE IF NOT EXISTS watches (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	account_id INTEGER NOT NULL,
+	name TEXT NOT NULL DEFAULT '',
+	enabled INTEGER NOT NULL DEFAULT 1,
+	subject TEXT NOT NULL DEFAULT '',
+	from_addr TEXT NOT NULL DEFAULT '',
+	folder TEXT NOT NULL DEFAULT 'inbox',
+	interval_seconds INTEGER NOT NULL DEFAULT 300,
+	webhook_url TEXT NOT NULL DEFAULT '',
+	last_run_at INTEGER NOT NULL DEFAULT 0,
+	last_status TEXT NOT NULL DEFAULT '',
+	last_error TEXT NOT NULL DEFAULT '',
+	last_hit_at INTEGER NOT NULL DEFAULT 0,
+	last_hit_count INTEGER NOT NULL DEFAULT 0,
+	total_hits INTEGER NOT NULL DEFAULT 0,
+	last_notified_at INTEGER NOT NULL DEFAULT 0,
+	last_duration_ms INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_watches_account ON watches(account_id);
+CREATE INDEX IF NOT EXISTS idx_watches_enabled ON watches(enabled);
 `
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
@@ -299,6 +326,9 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 	if err := s.DeleteLinksForAccount(ctx, id); err != nil {
 		return err
 	}
+	if err := s.DeleteWatchesForAccount(ctx, id); err != nil {
+		return err
+	}
 	res, err := s.db.ExecContext(ctx, "DELETE FROM accounts WHERE id = ?", id)
 	if err != nil {
 		return err
@@ -322,6 +352,9 @@ func (s *Store) DeleteMany(ctx context.Context, ids []int64) (int64, error) {
 		args[i] = id
 	}
 	if _, err := s.db.ExecContext(ctx, "DELETE FROM fetch_links WHERE account_id IN ("+strings.Join(holders, ",")+")", args...); err != nil {
+		return 0, err
+	}
+	if _, err := s.db.ExecContext(ctx, "DELETE FROM watches WHERE account_id IN ("+strings.Join(holders, ",")+")", args...); err != nil {
 		return 0, err
 	}
 	res, err := s.db.ExecContext(ctx, "DELETE FROM accounts WHERE id IN ("+strings.Join(holders, ",")+")", args...)

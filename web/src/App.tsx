@@ -10,9 +10,10 @@ import { LoginPage } from './pages/LoginPage'
 import { PublicFetchPage } from './pages/PublicFetchPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { FetchPage } from './pages/FetchPage'
+import { WatchesPage } from './pages/WatchesPage'
 import { SettingsPage } from './pages/SettingsPage'
 
-const ROUTES: Route[] = ['accounts', 'fetch', 'settings']
+const ROUTES: Route[] = ['accounts', 'fetch', 'watches', 'settings']
 
 function routeFromHash(): Route {
   const hash = window.location.hash.replace(/^#\/?/, '')
@@ -53,6 +54,7 @@ function Shell() {
     <AppShell route={route} onNavigate={navigate}>
       {route === 'accounts' && <AccountsPage />}
       {route === 'fetch' && <FetchPage />}
+      {route === 'watches' && <WatchesPage />}
       {route === 'settings' && <SettingsPage />}
     </AppShell>
   )

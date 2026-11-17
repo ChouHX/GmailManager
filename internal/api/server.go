@@ -19,6 +19,7 @@ import (
 	"gmailmanager/internal/secret"
 	"gmailmanager/internal/store"
 	"gmailmanager/internal/totp"
+	"gmailmanager/internal/watcher"
 )
 
 // BuildInfo is injected at link time and surfaced by /api/health.
@@ -37,6 +38,7 @@ type Server struct {
 	assets   http.Handler
 	fetchSem chan struct{}
 	build    BuildInfo
+	watcher  *watcher.Watcher
 }
 
 // New builds the API server. assets serves the built frontend.
@@ -57,7 +59,13 @@ func New(cfg config.Config, st *store.Store, box *secret.Box, assets http.Handle
 		fetchSem: make(chan struct{}, maxInt(2, cfg.FetchConcurrency)),
 		build:    build,
 	}
+	s.watcher = watcher.New(st, box, s.fetcher, maxInt(2, cfg.FetchConcurrency))
 	return s
+}
+
+// StartBackground launches the watch scheduler. Call once before serving.
+func (s *Server) StartBackground(ctx context.Context) {
+	s.watcher.Start(ctx)
 }
 
 func maxInt(a, b int) int {
@@ -98,6 +106,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/fetch/batch", s.auth(s.handleBatchFetch))
 	mux.HandleFunc("GET /api/fetch/{id}", s.auth(s.handleAccountFetch))
 	mux.HandleFunc("GET /api/fetch/{id}/message", s.auth(s.handleMessage))
+
+	// Watch tasks (scheduled polling + Discord webhook)
+	mux.HandleFunc("GET /api/watches", s.auth(s.handleListWatches))
+	mux.HandleFunc("POST /api/watches", s.auth(s.handleCreateWatch))
+	mux.HandleFunc("PUT /api/watches/{id}", s.auth(s.handleUpdateWatch))
+	mux.HandleFunc("DELETE /api/watches/{id}", s.auth(s.handleDeleteWatch))
+	mux.HandleFunc("POST /api/watches/{id}/toggle", s.auth(s.handleToggleWatch))
+	mux.HandleFunc("POST /api/watches/{id}/run", s.auth(s.handleRunWatch))
+	mux.HandleFunc("POST /api/watches/webhook-test", s.auth(s.handleWebhookTest))
 
 	// Share links (admin side)
 	mux.HandleFunc("GET /api/accounts/{id}/link", s.auth(s.handleAccountLink))

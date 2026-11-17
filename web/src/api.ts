@@ -172,8 +172,72 @@ export const api = {
     request<FetchResult>(`/api/fetch/${id}?limit=${limit}&folder=${folder}`),
   fetchBatch: (ids: number[], limit = 1, folder = 'auto') =>
     request<{ results: FetchResult[] }>('/api/fetch/batch', json({ ids, limit, folder })),
+  listWatches: () => request<{ items: Watch[]; status?: WatchStatus }>('/api/watches'),
+  createWatch: (input: WatchInput) => request<{ id: number }>('/api/watches', json(input)),
+  updateWatch: (id: number, input: WatchInput) =>
+    request<{ ok: boolean }>(`/api/watches/${id}`, { ...json(input), method: 'PUT' }),
+  deleteWatch: (id: number) => request<{ ok: boolean }>(`/api/watches/${id}`, { method: 'DELETE' }),
+  toggleWatch: (id: number) =>
+    request<{ ok: boolean; enabled: boolean }>(`/api/watches/${id}/toggle`, { method: 'POST' }),
+  runWatch: (id: number) => request<WatchRunResult>(`/api/watches/${id}/run`, { method: 'POST' }),
+  testWebhook: (url: string) =>
+    request<{ ok: boolean; message: string }>('/api/watches/webhook-test', json({ url })),
+
   message: (id: number, mailbox: string, uid: number) =>
     request<MessageDetail>(
       `/api/fetch/${id}/message?mailbox=${encodeURIComponent(mailbox)}&uid=${uid}`,
     ),
+}
+
+// ---------- watch tasks (scheduled polling + Discord webhook) ----------
+
+export interface Watch {
+  id: number
+  accountId: number
+  email: string
+  name: string
+  enabled: boolean
+  subject: string
+  from: string
+  folder: string
+  intervalSeconds: number
+  webhookUrl: string
+  lastRunAt: number
+  lastStatus: '' | 'ok' | 'error' | 'disabled'
+  lastError: string
+  lastHitAt: number
+  lastHitCount: number
+  totalHits: number
+  lastNotifiedAt: number
+  lastDurationMs: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface WatchStatus {
+  startedAt: string
+  lastTick: string
+  active: number
+}
+
+export interface WatchInput {
+  accountId: number
+  name: string
+  enabled: boolean
+  subject: string
+  from: string
+  folder: string
+  intervalSeconds: number
+  webhookUrl: string
+}
+
+export interface WatchRunResult {
+  task: Watch
+  ok: boolean
+  error?: string
+  fetched: number
+  hits: MessageSummary[]
+  notified: boolean
+  notifyError?: string
+  durationMs: number
 }

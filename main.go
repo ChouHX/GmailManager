@@ -59,6 +59,12 @@ func main() {
 	srv := api.New(cfg, st, box, assets, api.BuildInfo{Version: version, Commit: commit})
 	srv.LogStartup()
 
+	// Background watch scheduler: polls the latest messages of configured
+	// accounts and pushes Discord webhook notifications on matches.
+	bgCtx, stopBg := context.WithCancel(context.Background())
+	defer stopBg()
+	srv.StartBackground(bgCtx)
+
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           srv.Handler(),
@@ -80,6 +86,7 @@ func main() {
 
 	<-stop
 	log.Printf("shutting down")
+	stopBg()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(ctx)
