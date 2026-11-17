@@ -83,18 +83,25 @@ export function AccountsPage() {
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  // Only the newest request may write state: a slow response for page 1 must
+  // never overwrite page 2 (that looked like "pagination does nothing").
+  const loadSeq = useRef(0)
+
   const load = async (opts?: { silent?: boolean }) => {
+    const seq = ++loadSeq.current
     if (!opts?.silent) setLoading(true)
     setError('')
     try {
       const res = await api.listAccounts(page, PAGE_SIZE, query)
+      if (seq !== loadSeq.current) return
       setRows(res.items ?? [])
       setTotal(res.total)
       setSelected((prev) => prev.filter((id) => (res.items ?? []).some((r) => r.id === id)))
     } catch (err) {
+      if (seq !== loadSeq.current) return
       setError(err instanceof ApiError ? err.message : '加载失败')
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }
 
@@ -103,13 +110,25 @@ export function AccountsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, query])
 
+  // Debounced search. Only reacts to real typing: on mount it must not reset
+  // the page, otherwise a quick "next page" click gets undone 350ms later.
+  const firstSearchRun = useRef(true)
   useEffect(() => {
+    if (firstSearchRun.current) {
+      firstSearchRun.current = false
+      return
+    }
     const t = setTimeout(() => {
       setPage(1)
       setQuery(searchInput.trim())
     }, 350)
     return () => clearTimeout(t)
   }, [searchInput])
+
+  // Keep the page in range when the last page loses its rows (deletes, clear).
+  useEffect(() => {
+    if (!loading && page > pageCount) setPage(pageCount)
+  }, [loading, page, pageCount])
 
   useEffect(() => {
     if (!totpFor) return

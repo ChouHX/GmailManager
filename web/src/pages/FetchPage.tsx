@@ -81,19 +81,25 @@ export function FetchPage() {
   const abortRef = useRef(false)
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
 
+  // Discard stale responses so a slow page N-1 fetch cannot overwrite page N.
+  const loadSeq = useRef(0)
+
   const load = useCallback(
     async (silent = false) => {
+      const seq = ++loadSeq.current
       if (!silent) setLoading(true)
       setError('')
       try {
         const res = await api.listAccounts(page, pageSize, query)
+        if (seq !== loadSeq.current) return
         setRows(res.items ?? [])
         setTotal(res.total)
         setSelected((prev) => prev.filter((id) => (res.items ?? []).some((r) => r.id === id)))
       } catch (err) {
+        if (seq !== loadSeq.current) return
         setError(err instanceof ApiError ? err.message : '加载失败')
       } finally {
-        setLoading(false)
+        if (seq === loadSeq.current) setLoading(false)
       }
     },
     [page, pageSize, query],
@@ -103,13 +109,23 @@ export function FetchPage() {
     void load()
   }, [load])
 
+  // Debounced search; skipped on mount so a quick page change is not undone.
+  const firstSearchRun = useRef(true)
   useEffect(() => {
+    if (firstSearchRun.current) {
+      firstSearchRun.current = false
+      return
+    }
     const t = setTimeout(() => {
       setPage(1)
       setQuery(searchInput.trim())
     }, 350)
     return () => clearTimeout(t)
   }, [searchInput])
+
+  useEffect(() => {
+    if (!loading && page > pageCount) setPage(pageCount)
+  }, [loading, page, pageCount])
 
   useEffect(
     () => () => {
